@@ -1,344 +1,156 @@
-1) Konsep Umum Sistem
-
-Sistem terdiri dari 3 modul utama:
-
-Order Intake (CS)
-
-CS input order: Customer, Qty, Paket (2 kolom), Keterangan, Bahan, DP Produksi, DL Cust.
-
-Sistem otomatis menghitung TGL SELESAI berdasarkan jadwal produksi.
-
-Production Tracking (Produksi)
-
-Produksi tidak input order.
-
-Produksi hanya update progress dengan checklist stage:
-PROOFING → WAITINGLIST → PRINT → PRES → CUT FABRIC → JAHIT → QC JAHIT DAN STEAM → FINISHING → PENGIRIMAN.
-
-Monitoring (Admin)
-
-Admin melihat semua data.
-
-Fokus pada progress produksi, kapasitas harian, backlog, serta warning order yang mendekati deadline.
-
-2) Role & Hak Akses
-2.1 Admin
-
-Boleh:
-
-Melihat semua order & progress
-
-Melihat dashboard & warning
-
-Melihat rekap kapasitas per hari (utilisasi 200 pcs)
-
-Mengubah user/role (opsional)
-
-Override/penyesuaian data (opsional: edit order, koreksi stage)
-
-Tidak wajib:
-
-Input order
-
-Checklist stage
-
-2.2 Customer Service (CS)
-
-Boleh:
-
-Input order baru
-
-Edit order (sebelum masuk produksi / sebelum stage berjalan) (opsional aturan)
-
-Melihat status order & TGL SELESAI
-
-Tidak boleh:
-
-Mengubah checklist produksi (stage)
-
-Mengubah kapasitas harian
-
-2.3 Produksi
-
-Boleh:
-
-Melihat daftar kerja (worklist) berdasarkan tanggal / prioritas
-
-Update checklist stage produksi (PROOFING sampai PENGIRIMAN)
-
-Melihat deadline & warning (read-only)
-
-Tidak boleh:
-
-Input order baru
-
-Edit data order (customer/qty/paket)
-
-3) Data yang Dikelola (Level Flow)
-3.1 Data Order (diinput CS)
-
-Order ID / No
-
-Tanggal input (otomatis)
-
-Customer
-
-Qty
-
-Paket 1 (jenis produk)
-
-Paket 2 (grade: A/B/C/D/E/BASIC)
-
-Keterangan
-
-Bahan
-
-DP Produksi
-
-DL Cust (deadline dari customer)
-
-3.2 Data Jadwal Produksi (otomatis sistem)
-
-Kapasitas harian: 200 pcs/hari
-
-Order dipecah jadi “jatah produksi per hari” (allocation) jika perlu
-
-TGL SELESAI order diambil dari alokasi paling akhir + 14 hari
-
-3.3 Data Progress Produksi (diinput Produksi)
-
-Checklist stage (L–T)
-
-Tgl kirim (opsional saat PENGIRIMAN)
-
-4) Flow Utama End-to-End
-Flow A — Login & Routing Berdasarkan Role
-
-User buka website → halaman Login
-
-User login (email/username + password)
-
-Sistem cek role:
-
-Admin → masuk Dashboard Admin
-
-CS → masuk Halaman Input Order + List Order
-
-Produksi → masuk Board/Checklist Produksi + Worklist
-
-Flow B — CS Input Order sampai TGL SELESAI Otomatis
-B1. CS membuat order
-
-CS buka menu Input Order
-
-CS mengisi:
-
-Customer, Qty, Paket1, Paket2, Keterangan, Bahan, DP Produksi, DL Cust
-
-CS klik Simpan
-
-B2. Sistem menjalankan Auto Allocation (200 pcs/hari)
-
-Sistem mengambil Qty dan menjalankan rule:
-
-mencari tanggal produksi paling awal yang masih ada slot kosong
-
-mengisi sampai 200 pcs per hari
-
-jika kurang, tarik pesanan berikutnya untuk isi slot kosong
-
-jika lebih, sisanya dilempar ke hari berikutnya
-
-B3. Sistem menghitung TGL SELESAI (14 hari)
-
-Sistem menentukan:
-
-target selesai tiap alokasi = tanggal produksi + 14 hari
-
-TGL SELESAI order = target selesai TERAKHIR
-
-Sistem menyimpan hasil:
-
-order tersimpan
-
-alokasi tersimpan
-
-kolom TGL SELESAI otomatis terisi
-
-Output yang terlihat CS
-
-CS melihat order muncul di list dengan:
-
-status awal (mis: “OPEN”)
-
-TGL SELESAI
-
-ringkas progress (masih PROOFING / belum jalan)
-
-Flow C — Produksi Update Checklist Tahapan
-C1. Produksi melihat worklist
-
-Produksi login → halaman Worklist / Board
-
-Produksi melihat list order yang harus dikerjakan:
-
-bisa difilter berdasarkan prioritas deadline, customer, paket, atau tanggal alokasi produksi
-
-C2. Update stage (checklist)
-
-Saat produksi mulai:
-
-checklist PROOFING dicentang
-
-Saat lanjut tahapan:
-
-centang stage berikutnya berurutan
-
-Jika sudah selesai produksi & kirim:
-
-centang PENGIRIMAN
-
-isi TGL KIRIM (opsional)
-
-Aturan yang disarankan
-
-Checklist harus berurutan (tidak loncat), kecuali Admin mengizinkan override.
-
-Status order otomatis:
-
-belum ada checklist → OPEN
-
-ada checklist sebagian → IN_PROGRESS
-
-PENGIRIMAN dicentang → DONE
-
-Flow D — Warning Deadline (Near Deadline & Risk)
-D1. Sistem menghitung “sisa hari”
-
-Setiap hari (atau real-time), sistem menghitung:
-
-days_left = TGL_SELESAI - tanggal hari ini
-
-D2. Sistem menilai risiko berdasarkan stage
-
-Trigger utama:
-
-Jika days_left <= 3 → masuk kategori “Near Deadline”
-
-Rule risk (sesuai contoh kamu):
-
-HIGH RISK: days_left <= 3 dan progress masih ≤ JAHIT
-
-MEDIUM/NEAR: days_left <= 3 dan progress di QC/FINISHING
-
-OVERDUE: days_left < 0 dan belum PENGIRIMAN
-
-SAFE: PENGIRIMAN sudah dicentang
-
-D3. Output warning
-
-Muncul badge/warna di list Admin & Produksi:
-
-HIGH (merah/tegas)
-
-NEAR (kuning)
-
-OVERDUE (merah pekat)
-
-Notifikasi internal (opsional) bisa muncul di dashboard “Warning Center”
-
-5) Flow Admin (Monitoring & Kontrol)
-Admin Dashboard Flow
-
-Admin login → Dashboard
-
-Admin melihat ringkasan:
-
-total order aktif
-
-backlog pcs
-
-jumlah order Near Deadline / Overdue
-
-progress per stage (berapa order/pcs di Proofing, Print, Jahit, dst)
-
-utilisasi kapasitas harian (berapa terisi dari 200)
-
-Admin Monitoring Detail
-
-Admin klik list “Near Deadline / High Risk”
-
-Admin masuk detail order:
-
-data order (customer, qty, paket, dll)
-
-TGL SELESAI
-
-stage checklist saat ini
-
-histori perubahan (opsional)
-
-Admin Opsional: Koreksi
-
-Jika ada kesalahan input:
-
-Admin dapat mengedit order (opsional)
-
-Admin dapat reset/override stage (opsional, dengan alasan)
-
-6) Status & Tampilan yang Disarankan
-Status Order (untuk semua role)
-
-OPEN: baru masuk, belum ada progress checklist
-
-IN_PROGRESS: sudah ada progress
-
-DONE: PENGIRIMAN dicentang (dan TGL KIRIM terisi)
-
-Label Deadline
-
-NORMAL: days_left > 3
-
-NEAR: days_left <= 3
-
-OVERDUE: days_left < 0
-
-Label Risk
-
-HIGH: near deadline tapi stage masih jauh (≤ JAHIT)
-
-NEAR: near deadline tapi sudah QC/FINISHING
-
-SAFE: shipped
-
-7) Aturan Operasional Penting
-
-CS input → sistem auto hitung (CS tidak menentukan TGL SELESAI manual)
-
-Produksi hanya checklist (tidak edit order)
-
-Capacity 200 pcs/hari selalu dijaga oleh sistem
-
-14 hari dihitung dari tanggal alokasi produksi terakhir (jadi tanggal selesai realistis saat kapasitas penuh)
-
-Warning menyoroti yang “hampir telat dan progress tertinggal”
-
-
-
-nanti inputan data nya langsung masuk di spreadsheet aja, ini link nya
-https://docs.google.com/spreadsheets/d/1sqTt3CHGlx-PdwYE-IdubHoUkLQIXb1gU31QwKnnaN8/edit?gid=0#gid=0
-
-
-
-login nya : 
-
-username : admin
-pw : admin
-
-
-
-username : cs
-pw : cs
-
-username : produksi
-pw : produksi
+# Produksi Manager — AYRES System
+
+Sistem manajemen produksi berbasis web yang terintegrasi dengan Google Sheets. Memungkinkan CS input order, tim produksi update progress, dan admin memonitor keseluruhan operasi secara real-time.
+
+---
+
+## Tech Stack
+
+- **Frontend**: Next.js 14 (App Router), TypeScript, Tailwind CSS
+- **Backend**: Google Apps Script (via Web App deployment)
+- **Database**: Google Sheets
+- **Auth**: Session-based (localStorage)
+
+---
+
+## Spreadsheet
+
+```
+https://docs.google.com/spreadsheets/d/1OLGa2zlbGp9cfKl5TP6kX_UeWg9GWRBpHGVEI7WOVUU/edit
+```
+
+### Struktur Kolom (Sheet1, data mulai baris 5)
+
+| Kolom | Header | Keterangan |
+|-------|--------|------------|
+| A (1) | NO | Nomor urut order |
+| B (2) | CUSTOMER | Nama customer |
+| C (3) | QTY | Jumlah pcs |
+| D (4) | PAKET 1 | Jenis produk (PRO, KLASIK, dll) |
+| E (5) | PAKET 2 | Grade (A/B/C/D/E/BASIC) |
+| F (6) | KETERANGAN | Catatan order |
+| G (7) | BAHAN | Jenis bahan |
+| H (8) | DP PRODUKSI | Tanggal mulai produksi |
+| I (9) | DL CUST | Deadline dari customer |
+| J (10) | TGL SELESAI | Estimasi selesai (auto) |
+| K (11) | NO WORK ORDER | Kode WO (auto, format WO2603-001) |
+| L (12) | PROOFING | Checkbox stage |
+| M (13) | WAITINGLIST | Checkbox stage |
+| N (14) | PRINT | Checkbox stage |
+| O (15) | PRES | Checkbox stage |
+| P (16) | CUT FABRIC | Checkbox stage |
+| Q (17) | JAHIT | Checkbox stage |
+| R (18) | JAHIT DAN STEAM | Checkbox stage |
+| S (19) | FINISHING | Checkbox stage |
+| T (20) | PENGIRIMAN | Checkbox stage |
+| U (21) | STATUS | OPEN / IN_PROGRESS / DONE |
+| V (22) | TGL KIRIM | Tanggal kirim aktual |
+
+---
+
+## Role & Akses
+
+| Fitur | Admin | CS | Produksi |
+|-------|:-----:|:--:|:--------:|
+| Dashboard | ✅ | ❌ | ❌ |
+| Lihat semua order | ✅ | ✅ | ✅ |
+| Input order baru | ❌ | ✅ | ❌ |
+| Edit order | ❌ | ✅ | ❌ |
+| Update progress/stage | ❌ | ❌ | ✅ |
+| Kapasitas produksi | ✅ | ✅ | ❌ |
+| Work board | ❌ | ❌ | ✅ |
+
+---
+
+## Akun Login
+
+| Username | Password | Role |
+|----------|----------|------|
+| `admin` | `admin` | Admin |
+| `cs` | `cs` | Customer Service |
+| `produksi` | `produksi` | Produksi |
+
+---
+
+## Logika Bisnis
+
+### Auto Scheduling (TGL SELESAI)
+- Kapasitas produksi: **200 pcs/hari**
+- Sistem mengalokasikan qty order ke hari-hari produksi berdasarkan slot yang tersedia
+- TGL SELESAI = tanggal alokasi terakhir + **14 hari**
+
+### Status Order
+| Status | Kondisi |
+|--------|---------|
+| `OPEN` | Belum ada progress checklist |
+| `IN_PROGRESS` | Ada minimal 1 stage dicentang |
+| `DONE` | PENGIRIMAN dicentang |
+
+### Risk Level
+| Level | Kondisi |
+|-------|---------|
+| `NORMAL` | Sisa hari > 3 |
+| `NEAR` | Sisa hari ≤ 3, progress sudah di QC/FINISHING |
+| `HIGH` | Sisa hari ≤ 3, progress masih ≤ JAHIT |
+| `OVERDUE` | Sudah lewat deadline, belum DONE |
+| `SAFE` | Status DONE |
+
+### No Work Order
+Format: `WO[YY][MM]-[NNN]`
+Contoh: `WO2603-001` = order ke-1, bulan Maret 2026
+
+---
+
+## Setup & Instalasi
+
+### 1. Clone & Install
+```bash
+git clone <repo-url>
+cd Web-Monitoring
+npm install
+```
+
+### 2. Environment Variable
+Buat file `.env.local`:
+```env
+APPS_SCRIPT_URL=https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec
+```
+
+### 3. Google Apps Script
+- Buka [script.google.com](https://script.google.com)
+- Buat project baru, paste isi `Code.gs`
+- Deploy → **New Deployment** → Web App
+  - Execute as: **Me**
+  - Who has access: **Anyone**
+- Copy URL deployment → paste ke `.env.local`
+
+### 4. Jalankan
+```bash
+npm run dev
+```
+Buka [http://localhost:3000](http://localhost:3000)
+
+---
+
+## Struktur Proyek
+
+```
+app/
+├── page.tsx                    # Login page
+├── (protected)/
+│   ├── layout.tsx              # Sidebar + navigasi
+│   ├── dashboard/page.tsx      # Dashboard admin
+│   ├── orders/
+│   │   ├── page.tsx            # Daftar order
+│   │   └── new/page.tsx        # Form input order
+│   ├── kapasitas/page.tsx      # Kapasitas harian
+│   └── production/page.tsx     # Work board produksi
+lib/
+├── api.ts                      # API calls ke proxy
+├── auth-context.tsx            # Auth state
+├── cache.ts                    # SessionStorage cache
+├── constants.ts                # Stage, label, style
+├── types.ts                    # TypeScript types
+└── utils.ts                    # Format tanggal, kalkulasi
+Code.gs                         # Google Apps Script
+```
