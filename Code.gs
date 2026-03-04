@@ -4,7 +4,7 @@
 // UPDATE: Paste ulang kode ini di Apps Script lalu Deploy ulang (New Deployment)
 // ========================================
 
-var SPREADSHEET_ID = '1sqTt3CHGlx-PdwYE-IdubHoUkLQIXb1gU31QwKnnaN8';
+var SPREADSHEET_ID = '1OLGa2zlbGp9cfKl5TP6kX_UeWg9GWRBpHGVEI7WOVUU';
 var SHEET_NAME = 'Sheet1'; // Ganti jika nama tab sheet berbeda
 var DATA_START_ROW = 5;
 var DAILY_CAPACITY = 200;
@@ -18,16 +18,17 @@ var USERS = {
 
 var COL = {
   NO: 1, CUSTOMER: 2, QTY: 3, PAKET1: 4, PAKET2: 5,
-  KETERANGAN: 6, BAHAN: 7, DP_PRODUKSI: 8, DL_CUST: 9, NO_WO: 10,
-  PROOFING: 11, WAITINGLIST: 12, PRINT: 13, PRES: 14, CUT_FABRIC: 15,
-  JAHIT: 16, QC: 17, FINISHING: 18, PENGIRIMAN: 19,
-  TGL_SELESAI: 20, STATUS: 21, TGL_KIRIM: 22
+  KETERANGAN: 6, BAHAN: 7, DP_PRODUKSI: 8, DL_CUST: 9,
+  TGL_SELESAI: 10, NO_WO: 11,
+  PROOFING: 12, WAITINGLIST: 13, PRINT: 14, PRES: 15, CUT_FABRIC: 16,
+  JAHIT: 17, QC: 18, FINISHING: 19, PENGIRIMAN: 20,
+  STATUS: 21, TGL_KIRIM: 22
 };
 
 var STAGE_COLS = {
-  PROOFING: 11, WAITINGLIST: 12, PRINT: 13, PRES: 14,
-  CUT_FABRIC: 15, JAHIT: 16, QC_JAHIT_STEAM: 17,
-  FINISHING: 18, PENGIRIMAN: 19
+  PROOFING: 12, WAITINGLIST: 13, PRINT: 14, PRES: 15,
+  CUT_FABRIC: 16, JAHIT: 17, QC_JAHIT_STEAM: 18,
+  FINISHING: 19, PENGIRIMAN: 20
 };
 
 // ====== ENTRY POINTS ======
@@ -93,21 +94,23 @@ function getSheet() {
 
 function fmtDate(val) {
   if (!val && val !== 0) return '';
-  var d;
   if (val instanceof Date) {
-    d = val;
-  } else {
-    var s = val.toString();
-    // Already DD/MM/YYYY
-    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) return s;
-    // Try parse
-    d = new Date(s);
-    if (isNaN(d.getTime())) return s;
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), 'dd/MM/yyyy');
   }
-  var day = d.getDate();
-  var mon = d.getMonth() + 1;
-  var yr  = d.getFullYear();
-  return (day < 10 ? '0' : '') + day + '/' + (mon < 10 ? '0' : '') + mon + '/' + yr;
+  var s = val.toString();
+  // Already DD/MM/YYYY
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) return s;
+  var d = new Date(s);
+  if (isNaN(d.getTime())) return s;
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'dd/MM/yyyy');
+}
+
+// Parse DD/MM/YYYY string → Date object (unambiguous storage)
+function parseDDMMYYYY(s) {
+  if (!s) return '';
+  var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+  return s;
 }
 
 function boolVal(v) {
@@ -204,7 +207,14 @@ function fetchOrdersFromSheet() {
       bahan: (row[COL.BAHAN - 1] || '').toString(),
       dpProduksi: fmtDate(row[COL.DP_PRODUKSI - 1]),
       dlCust: dlCust,
-      noWorkOrder: (row[COL.NO_WO - 1] || '').toString(),
+      noWorkOrder: (function() {
+        var v = (row[COL.NO_WO - 1] || '').toString();
+        if (v === '' || v === 'true' || v === 'false' || v === 'TRUE' || v === 'FALSE') {
+          var n = parseInt(row[COL.NO - 1]) || (i + 1);
+          return n < 10 ? '000' + n : n < 100 ? '00' + n : n < 1000 ? '0' + n : '' + n;
+        }
+        return v;
+      })(),
       tglSelesai: tglSelesai,
       status: status,
       progress: prog,
@@ -243,11 +253,12 @@ function addOrder(data) {
     data.paket2 || '',
     data.keterangan || '',
     data.bahan || '',
-    data.dpProduksi || '',
-    data.dlCust || '',
-    noWO,
-    false, false, false, false, false, false, false, false, false, // K–S
-    tglSelesai, 'OPEN', ''
+    parseDDMMYYYY(data.dpProduksi || ''),
+    parseDDMMYYYY(data.dlCust || ''),
+    tglSelesai,  // J (10) - TGL_SELESAI
+    noWO,        // K (11) - NO_WO
+    false, false, false, false, false, false, false, false, false, // L–T (12-20) stages
+    'OPEN', ''   // U (21) STATUS, V (22) TGL_KIRIM
   ];
 
   sheet.getRange(newRow, 1, 1, rowData.length).setValues([rowData]);

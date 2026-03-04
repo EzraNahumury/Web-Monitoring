@@ -95,7 +95,7 @@ export default function OrdersPage() {
         </div>
 
         {/* Action button */}
-        {(user?.role === 'cs' || user?.role === 'admin') && (
+        {user?.role === 'cs' && (
           <Link
             href="/orders/new"
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shadow-sm"
@@ -214,7 +214,7 @@ export default function OrdersPage() {
 
       {/* Detail modal */}
       {selected && (
-        <OrderDetailModal order={selected} onClose={() => setSelected(null)} canEdit={user?.role === 'cs' || user?.role === 'admin'} onSaved={fetchOrders} />
+        <OrderDetailModal order={selected} onClose={() => setSelected(null)} canEdit={user?.role === 'cs'} onSaved={fetchOrders} />
       )}
     </div>
   );

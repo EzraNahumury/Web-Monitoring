@@ -93,25 +93,24 @@ export function computeAllocations(orders: Order[], days = 45): DayAllocation[] 
     });
 }
 
+const MONTHS_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+function fmtDateParts(day: number, month: number, year: number): string {
+  return `${String(day).padStart(2, '0')} ${MONTHS_ID[month]} ${year}`;
+}
+
 export function formatDate(dateStr: string): string {
   if (!dateStr || dateStr === '-') return '-';
   try {
     // DD/MM/YYYY (spreadsheet format)
     if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
-      const [day, month, year] = dateStr.split('/');
-      const d = new Date(+year, +month - 1, +day);
-      return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+      const [d, m, y] = dateStr.split('/');
+      return fmtDateParts(+d, +m - 1, +y);
     }
     // YYYY-MM-DD (HTML date input)
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       const [y, m, d] = dateStr.split('-');
-      const dt = new Date(+y, +m - 1, +d);
-      return dt.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
-    }
-    // ISO string or any other date string → try new Date()
-    const d = new Date(dateStr);
-    if (!isNaN(d.getTime())) {
-      return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+      return fmtDateParts(+d, +m - 1, +y);
     }
   } catch {}
   return dateStr;
