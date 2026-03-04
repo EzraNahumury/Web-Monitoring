@@ -47,9 +47,9 @@ const NAV_ITEMS: Record<Role, { href: string; label: string; icon: React.ReactNo
 };
 
 const ROLE_BADGE: Record<Role, string> = {
-  admin: 'bg-indigo-100 text-indigo-700',
-  cs: 'bg-blue-100 text-blue-700',
-  produksi: 'bg-amber-100 text-amber-700',
+  admin: 'bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-sm',
+  cs: 'bg-sky-50 text-sky-700 border border-sky-200/80 shadow-sm',
+  produksi: 'bg-amber-50 text-amber-700 border border-amber-200/80 shadow-sm',
 };
 const ROLE_LABEL: Record<Role, string> = {
   admin: 'Admin',
@@ -103,7 +103,6 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
         {/* Nav */}
         <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
           {navItems.map(item => {
-            const active = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href) && item.href !== '/orders' || pathname === item.href);
             const isActive = pathname === item.href;
             return (
               <Link
@@ -170,11 +169,14 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
           <div className="flex-1">
             <PageTitle pathname={pathname} />
           </div>
-          <div className="flex items-center gap-2">
-            <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${ROLE_BADGE[user.role]}`}>
+          <div className="flex items-center gap-2 rounded-full bg-slate-50/90 border border-slate-200 px-2 py-1">
+            <span className={`text-xs px-3 py-1 rounded-full font-semibold tracking-[0.01em] ${ROLE_BADGE[user.role]}`}>
               {ROLE_LABEL[user.role]}
             </span>
-            <span className="text-sm text-slate-600 font-medium">{user.username}</span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 uppercase">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              {user.username}
+            </span>
           </div>
         </header>
 

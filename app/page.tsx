@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { apiLogin } from '@/lib/api';
@@ -15,15 +15,15 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [focused, setFocused] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!loading && user) redirectByRole(user.role);
-  }, [user, loading]);
-
-  function redirectByRole(role: Role) {
+  const redirectByRole = useCallback((role: Role) => {
     if (role === 'admin') router.replace('/dashboard');
     else if (role === 'cs') router.replace('/orders');
     else router.replace('/production');
-  }
+  }, [router]);
+
+  useEffect(() => {
+    if (!loading && user) redirectByRole(user.role);
+  }, [user, loading, redirectByRole]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -194,32 +194,6 @@ export default function LoginPage() {
                 </span>
               </button>
             </form>
-
-            {/* Divider */}
-            <div className="flex items-center gap-3 my-6">
-              <div className="flex-1 h-px bg-white/[0.06]" />
-              <span className="text-[11px] text-slate-600 font-medium tracking-widest uppercase">Quick Access</span>
-              <div className="flex-1 h-px bg-white/[0.06]" />
-            </div>
-
-            {/* Quick login buttons */}
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { role: 'Admin', user: 'admin', from: 'from-indigo-500', to: 'to-indigo-600', glow: 'shadow-indigo-500/20', border: 'border-indigo-500/20 hover:border-indigo-500/40', badge: 'bg-indigo-500/10 text-indigo-400' },
-                { role: 'CS', user: 'cs', from: 'from-sky-500', to: 'to-blue-600', glow: 'shadow-sky-500/20', border: 'border-sky-500/20 hover:border-sky-500/40', badge: 'bg-sky-500/10 text-sky-400' },
-                { role: 'Produksi', user: 'produksi', from: 'from-amber-500', to: 'to-orange-500', glow: 'shadow-amber-500/20', border: 'border-amber-500/20 hover:border-amber-500/40', badge: 'bg-amber-500/10 text-amber-400' },
-              ].map(a => (
-                <button
-                  key={a.user}
-                  type="button"
-                  onClick={() => { setUsername(a.user); setPassword(a.user); }}
-                  className={`relative group flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl border bg-white/[0.03] hover:bg-white/[0.06] transition-all duration-200 ${a.border}`}
-                >
-                  <span className={`text-[11px] font-bold ${a.badge} px-2 py-0.5 rounded-full`}>{a.role}</span>
-                  <span className="text-[11px] text-slate-600 font-mono">{a.user}</span>
-                </button>
-              ))}
-            </div>
           </div>
         </div>
 

@@ -31,6 +31,12 @@ Sistem manajemen produksi berbasis web terintegrasi dengan Google Sheets. CS inp
 
 ## Akun Login
 
+Gunakan kredensial berikut untuk login:
+
+- Admin: `username: admin` | `password: admin`
+- Customer Service: `username: cs` | `password: cs`
+- Produksi: `username: produksi` | `password: produksi`
+
 | Username | Password | Role |
 |----------|----------|------|
 | `admin` | `admin` | Admin |
