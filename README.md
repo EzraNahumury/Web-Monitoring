@@ -1,64 +1,31 @@
 # Produksi Manager — AYRES System
 
-Sistem manajemen produksi berbasis web yang terintegrasi dengan Google Sheets. Memungkinkan CS input order, tim produksi update progress, dan admin memonitor keseluruhan operasi secara real-time.
+Sistem manajemen produksi berbasis web terintegrasi dengan Google Sheets. CS input order, tim produksi update progress tahapan, admin memantau seluruh operasi secara real-time.
 
 ---
 
 ## Tech Stack
 
-- **Frontend**: Next.js 14 (App Router), TypeScript, Tailwind CSS
-- **Backend**: Google Apps Script (via Web App deployment)
-- **Database**: Google Sheets
-- **Auth**: Session-based (localStorage)
+| Layer | Teknologi |
+|-------|-----------|
+| Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS |
+| Backend | Google Apps Script (Web App) |
+| Database | Google Sheets |
+| Auth | Session-based (localStorage) |
 
 ---
 
-## Spreadsheet
-
-```
-https://docs.google.com/spreadsheets/d/1OLGa2zlbGp9cfKl5TP6kX_UeWg9GWRBpHGVEI7WOVUU/edit
-```
-
-### Struktur Kolom (Sheet1, data mulai baris 5)
-
-| Kolom | Header | Keterangan |
-|-------|--------|------------|
-| A (1) | NO | Nomor urut order |
-| B (2) | CUSTOMER | Nama customer |
-| C (3) | QTY | Jumlah pcs |
-| D (4) | PAKET 1 | Jenis produk (PRO, KLASIK, dll) |
-| E (5) | PAKET 2 | Grade (A/B/C/D/E/BASIC) |
-| F (6) | KETERANGAN | Catatan order |
-| G (7) | BAHAN | Jenis bahan |
-| H (8) | DP PRODUKSI | Tanggal mulai produksi |
-| I (9) | DL CUST | Deadline dari customer |
-| J (10) | TGL SELESAI | Estimasi selesai (auto) |
-| K (11) | NO WORK ORDER | Kode WO (auto, format WO2603-001) |
-| L (12) | PROOFING | Checkbox stage |
-| M (13) | WAITINGLIST | Checkbox stage |
-| N (14) | PRINT | Checkbox stage |
-| O (15) | PRES | Checkbox stage |
-| P (16) | CUT FABRIC | Checkbox stage |
-| Q (17) | JAHIT | Checkbox stage |
-| R (18) | JAHIT DAN STEAM | Checkbox stage |
-| S (19) | FINISHING | Checkbox stage |
-| T (20) | PENGIRIMAN | Checkbox stage |
-| U (21) | STATUS | OPEN / IN_PROGRESS / DONE |
-| V (22) | TGL KIRIM | Tanggal kirim aktual |
-
----
-
-## Role & Akses
+## Fitur per Role
 
 | Fitur | Admin | CS | Produksi |
 |-------|:-----:|:--:|:--------:|
-| Dashboard | ✅ | ❌ | ❌ |
+| Dashboard ringkasan | ✅ | ❌ | ❌ |
 | Lihat semua order | ✅ | ✅ | ✅ |
 | Input order baru | ❌ | ✅ | ❌ |
-| Edit order | ❌ | ✅ | ❌ |
-| Update progress/stage | ❌ | ❌ | ✅ |
-| Kapasitas produksi | ✅ | ✅ | ❌ |
-| Work board | ❌ | ❌ | ✅ |
+| Edit detail order | ❌ | ✅ | ❌ |
+| Update progress / stage | ❌ | ❌ | ✅ |
+| Jadwal kapasitas produksi | ✅ | ✅ | ❌ |
+| Work board produksi | ❌ | ❌ | ✅ |
 
 ---
 
@@ -72,32 +39,68 @@ https://docs.google.com/spreadsheets/d/1OLGa2zlbGp9cfKl5TP6kX_UeWg9GWRBpHGVEI7WO
 
 ---
 
+## Spreadsheet
+
+Link: `https://docs.google.com/spreadsheets/d/1OLGa2zlbGp9cfKl5TP6kX_UeWg9GWRBpHGVEI7WOVUU/edit`
+
+### Struktur Kolom — Sheet1 (data mulai baris 5)
+
+| Kolom | Header | Keterangan |
+|-------|--------|------------|
+| A | NO | Nomor urut order |
+| B | CUSTOMER | Nama customer |
+| C | QTY | Jumlah pcs |
+| D | PAKET 1 | Jenis produk (PRO, KLASIK, dll) |
+| E | PAKET 2 | Grade (A / B / C / D / E / BASIC) |
+| F | KETERANGAN | Catatan order |
+| G | BAHAN | Jenis bahan |
+| H | DP PRODUKSI | Tanggal mulai produksi |
+| I | DL CUST | Deadline dari customer |
+| J | TGL SELESAI | Estimasi selesai — dihitung otomatis |
+| K | NO WORK ORDER | Kode WO — digenerate otomatis |
+| L | PROOFING | Checkbox stage |
+| M | WAITINGLIST | Checkbox stage |
+| N | PRINT | Checkbox stage |
+| O | PRES | Checkbox stage |
+| P | CUT FABRIC | Checkbox stage |
+| Q | JAHIT | Checkbox stage |
+| R | JAHIT DAN STEAM | Checkbox stage |
+| S | FINISHING | Checkbox stage |
+| T | PENGIRIMAN | Checkbox stage |
+| U | STATUS | `OPEN` / `IN_PROGRESS` / `DONE` |
+| V | TGL KIRIM | Tanggal kirim aktual |
+
+---
+
 ## Logika Bisnis
-
-### Auto Scheduling (TGL SELESAI)
-- Kapasitas produksi: **200 pcs/hari**
-- Sistem mengalokasikan qty order ke hari-hari produksi berdasarkan slot yang tersedia
-- TGL SELESAI = tanggal alokasi terakhir + **14 hari**
-
-### Status Order
-| Status | Kondisi |
-|--------|---------|
-| `OPEN` | Belum ada progress checklist |
-| `IN_PROGRESS` | Ada minimal 1 stage dicentang |
-| `DONE` | PENGIRIMAN dicentang |
-
-### Risk Level
-| Level | Kondisi |
-|-------|---------|
-| `NORMAL` | Sisa hari > 3 |
-| `NEAR` | Sisa hari ≤ 3, progress sudah di QC/FINISHING |
-| `HIGH` | Sisa hari ≤ 3, progress masih ≤ JAHIT |
-| `OVERDUE` | Sudah lewat deadline, belum DONE |
-| `SAFE` | Status DONE |
 
 ### No Work Order
 Format: `WO[YY][MM]-[NNN]`
-Contoh: `WO2603-001` = order ke-1, bulan Maret 2026
+
+Contoh: `WO2603-001` = order ke-1, Maret 2026
+
+### Auto Scheduling (TGL SELESAI)
+- Kapasitas produksi: **200 pcs/hari**
+- Sistem mengalokasikan qty order ke slot hari yang tersedia secara berurutan
+- TGL SELESAI = hari alokasi terakhir + **14 hari buffer**
+
+### Status Order
+
+| Status | Kondisi |
+|--------|---------|
+| `OPEN` | Belum ada stage yang dicentang |
+| `IN_PROGRESS` | Minimal 1 stage sudah dicentang |
+| `DONE` | PENGIRIMAN sudah dicentang — checklist jadi read-only |
+
+### Risk Level
+
+| Level | Kondisi |
+|-------|---------|
+| `NORMAL` | Sisa hari > 3 |
+| `NEAR` | Sisa hari ≤ 3, progress sudah di QC / FINISHING |
+| `HIGH` | Sisa hari ≤ 3, progress masih ≤ JAHIT |
+| `OVERDUE` | Sudah lewat deadline, belum DONE |
+| `SAFE` | Status DONE |
 
 ---
 
@@ -111,18 +114,18 @@ npm install
 ```
 
 ### 2. Environment Variable
-Buat file `.env.local`:
+Buat file `.env.local` di root project:
 ```env
 APPS_SCRIPT_URL=https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec
 ```
 
-### 3. Google Apps Script
-- Buka [script.google.com](https://script.google.com)
-- Buat project baru, paste isi `Code.gs`
-- Deploy → **New Deployment** → Web App
-  - Execute as: **Me**
-  - Who has access: **Anyone**
-- Copy URL deployment → paste ke `.env.local`
+### 3. Deploy Google Apps Script
+1. Buka [script.google.com](https://script.google.com) → buat project baru
+2. Paste isi file `Code.gs`
+3. Klik **Deploy** → **New Deployment** → pilih type **Web App**
+   - Execute as: `Me`
+   - Who has access: `Anyone`
+4. Copy URL deployment → paste ke `.env.local`
 
 ### 4. Jalankan
 ```bash
@@ -130,27 +133,44 @@ npm run dev
 ```
 Buka [http://localhost:3000](http://localhost:3000)
 
+> **Catatan:** Setelah deploy ulang Apps Script, selalu buat **New Deployment** (bukan edit yang lama). Update URL baru ke `.env.local` lalu restart server.
+
 ---
 
 ## Struktur Proyek
 
 ```
-app/
-├── page.tsx                    # Login page
-├── (protected)/
-│   ├── layout.tsx              # Sidebar + navigasi
-│   ├── dashboard/page.tsx      # Dashboard admin
-│   ├── orders/
-│   │   ├── page.tsx            # Daftar order
-│   │   └── new/page.tsx        # Form input order
-│   ├── kapasitas/page.tsx      # Kapasitas harian
-│   └── production/page.tsx     # Work board produksi
-lib/
-├── api.ts                      # API calls ke proxy
-├── auth-context.tsx            # Auth state
-├── cache.ts                    # SessionStorage cache
-├── constants.ts                # Stage, label, style
-├── types.ts                    # TypeScript types
-└── utils.ts                    # Format tanggal, kalkulasi
-Code.gs                         # Google Apps Script
+Web-Monitoring/
+├── app/
+│   ├── page.tsx                    # Login page
+│   └── (protected)/
+│       ├── layout.tsx              # Sidebar + navigasi utama
+│       ├── dashboard/
+│       │   └── page.tsx            # Dashboard admin
+│       ├── orders/
+│       │   ├── page.tsx            # Daftar order (semua role)
+│       │   └── new/page.tsx        # Form input order (CS)
+│       ├── kapasitas/
+│       │   └── page.tsx            # Jadwal kapasitas harian
+│       └── production/
+│           └── page.tsx            # Work board produksi
+├── lib/
+│   ├── api.ts                      # Fungsi fetch ke Apps Script
+│   ├── auth-context.tsx            # Auth state (React Context)
+│   ├── cache.ts                    # Cache SessionStorage
+│   ├── constants.ts                # Stage, label, style mapping
+│   ├── types.ts                    # TypeScript types & interfaces
+│   └── utils.ts                    # Format tanggal, kalkulasi progress
+├── Code.gs                         # Google Apps Script (backend)
+├── .env.local                      # URL deployment (tidak di-commit)
+└── README.md
 ```
+
+---
+
+## Catatan Pengembangan
+
+- **Cache**: Data order di-cache di `sessionStorage` selama ±5 menit. Tombol **Refresh** di setiap halaman memaksa fetch ulang dari Sheets.
+- **Date format**: Semua tanggal disimpan di Sheets dalam format `DD/MM/YYYY`. Frontend mem-parse manual tanpa bergantung locale browser.
+- **Sequential checklist**: Stage harus dicentang berurutan. Tidak bisa skip stage.
+- **Read-only setelah DONE**: Setelah PENGIRIMAN dicentang, seluruh checklist menjadi read-only dan tidak bisa diubah.
