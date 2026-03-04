@@ -18,7 +18,7 @@ export default function KapasitasPage() {
   const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
-    if (user && user.role !== 'admin') router.replace('/dashboard');
+    if (user && user.role !== 'admin' && user.role !== 'cs') router.replace('/dashboard');
     else loadData(false);
   }, [user]);
 
