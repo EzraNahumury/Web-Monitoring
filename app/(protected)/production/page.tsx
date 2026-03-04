@@ -323,6 +323,11 @@ function OrderCard({ order, expanded, onToggle, onCheck, updating, canEdit, onPe
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
             Checklist Tahapan Produksi
             {!canEdit && <span className="ml-2 text-slate-400 normal-case font-normal">(read-only)</span>}
+            {canEdit && order.status === 'DONE' && (
+              <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full normal-case font-semibold">
+                🔒 Selesai · Read-only
+              </span>
+            )}
           </p>
           <div className="space-y-2">
             {STAGES.map((s, i) => {
@@ -330,7 +335,8 @@ function OrderCard({ order, expanded, onToggle, onCheck, updating, canEdit, onPe
               const key = `${order.rowIndex}-${s.key}`;
               const isUpdating = updating === key;
               const prevDone = i === 0 || order.progress[STAGES[i - 1].key as keyof Progress];
-              const canCheck = canEdit && !isUpdating && (checked || prevDone);
+              const isDone = order.status === 'DONE';
+              const canCheck = canEdit && !isUpdating && !isDone && (checked || prevDone);
               const isPengiriman = s.key === 'PENGIRIMAN';
 
               return (
