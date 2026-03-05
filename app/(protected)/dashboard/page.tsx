@@ -15,6 +15,9 @@ export default function DashboardPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [orderPage, setOrderPage] = useState(1);
+  const ORDER_PAGE_SIZE = 8;
 
   useEffect(() => {
     if (user && user.role !== 'admin') {
@@ -41,11 +44,40 @@ export default function DashboardPage() {
   }
 
   const warningOrders = orders.filter(o => o.riskLevel === 'HIGH' || o.riskLevel === 'OVERDUE' || o.riskLevel === 'NEAR');
-  const normalUsed = stats ? Math.min(stats.dailyCapacityUsed, 200) : 0;
-  const extendUsed = stats ? Math.min(Math.max(0, stats.dailyCapacityUsed - 200), 100) : 0;
-  const normalPct = Math.round((normalUsed / 200) * 100);
-  const extendPct = extendUsed > 0 ? Math.round((extendUsed / 100) * 100) : 0;
-  const isNearFull = normalUsed >= 150 && normalUsed < 200;
+
+  const parseDate = (s: string): Date | null => {
+    if (!s || s === '—') return null;
+    const parts = s.split('/');
+    if (parts.length === 3) { const d = new Date(+parts[2], +parts[1] - 1, +parts[0]); return isNaN(d.getTime()) ? null : d; }
+    const d = new Date(s); return isNaN(d.getTime()) ? null : d;
+  };
+  const dateMs = (s: string) => parseDate(s)?.getTime() ?? Infinity;
+  const monthKey = (s: string) => { const d = parseDate(s); return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '9999-99'; };
+  const monthLabel = (key: string) => {
+    const [y, m] = key.split('-');
+    const BULAN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    return `${BULAN[+m - 1]} ${y}`;
+  };
+
+  // Group by month → date → orders
+  const monthsMap = new Map<string, Map<string, Order[]>>();
+  for (const o of orders) {
+    const dk = o.tglSelesai || o.dlCust || '—';
+    const mk = monthKey(dk);
+    if (!monthsMap.has(mk)) monthsMap.set(mk, new Map());
+    const dm = monthsMap.get(mk)!;
+    if (!dm.has(dk)) dm.set(dk, []);
+    dm.get(dk)!.push(o);
+  }
+  const sortedMonths = Array.from(monthsMap.keys()).sort();
+  const activeMonth = selectedMonth && monthsMap.has(selectedMonth) ? selectedMonth : (sortedMonths[0] ?? '');
+  const activeDateMap = monthsMap.get(activeMonth) ?? new Map<string, Order[]>();
+  const activeDates = Array.from(activeDateMap.entries()).sort(([a], [b]) => dateMs(a) - dateMs(b));
+  const activeMonthOrderCount = Array.from(activeDateMap.values()).reduce((s, arr) => s + arr.length, 0);
+  const totalPages = activeMonthOrderCount > ORDER_PAGE_SIZE ? Math.ceil(activeDates.length / ORDER_PAGE_SIZE) : 1;
+  const pagedDates = activeMonthOrderCount > ORDER_PAGE_SIZE
+    ? activeDates.slice((orderPage - 1) * ORDER_PAGE_SIZE, orderPage * ORDER_PAGE_SIZE)
+    : activeDates;
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={fetchData} />;
@@ -78,7 +110,7 @@ export default function DashboardPage() {
         <StatCard
           label="Kapasitas Hari Ini"
           value={stats?.dailyCapacityUsed ?? 0}
-          sub={`normal ${normalPct}% · extend ${extendUsed} pcs`}
+          sub={`total hari ini`}
           color="green"
           icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>}
         />
@@ -122,47 +154,6 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Capacity bar */}
-          <div className="mt-6 pt-5 border-t border-slate-100">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-slate-700">Kapasitas Harian</span>
-              <span className="text-sm font-bold text-slate-800">{stats?.dailyCapacityUsed ?? 0} pcs</span>
-            </div>
-            <div className="flex gap-3 items-end">
-              {/* Normal bar */}
-              <div className="flex-[2]">
-                <div className="flex items-center gap-1 mb-1">
-                  <span className="text-xs text-slate-400">Normal</span>
-                  {isNearFull && <span className="text-xs" title="Mendekati penuh">⚠️</span>}
-                  <span className={`ml-auto text-xs font-bold tabular-nums ${normalUsed >= 200 ? 'text-red-600' : isNearFull ? 'text-amber-600' : 'text-slate-600'}`}>
-                    {normalUsed}/200
-                  </span>
-                </div>
-                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${normalUsed >= 200 ? 'bg-red-500' : isNearFull ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                    style={{ width: `${normalPct}%` }}
-                  />
-                </div>
-              </div>
-              {/* Extend bar */}
-              <div className="flex-1">
-                <div className="flex items-center gap-1 mb-1">
-                  <span className="text-xs text-slate-400">Extend</span>
-                  <span className={`ml-auto text-xs font-bold tabular-nums ${extendUsed >= 100 ? 'text-red-600' : extendUsed > 0 ? 'text-orange-600' : 'text-slate-400'}`}>
-                    {extendUsed}/100
-                  </span>
-                </div>
-                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${extendUsed >= 100 ? 'bg-red-400' : extendUsed > 0 ? 'bg-orange-400' : ''}`}
-                    style={{ width: `${extendPct}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-            <p className="text-xs text-slate-400 mt-1.5">{Math.max(0, 200 - normalUsed)} sisa normal · {Math.max(0, 100 - extendUsed)} sisa extend hari ini</p>
-          </div>
         </div>
 
         {/* Warning center */}
@@ -214,7 +205,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent orders table */}
+      {/* Recent orders — grouped by month → date */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <h2 className="font-semibold text-slate-800">Order Terbaru</h2>
@@ -222,46 +213,112 @@ export default function DashboardPage() {
             Lihat semua →
           </Link>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-100">
-                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">No</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Customer</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Qty</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Paket</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">TGL Selesai</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Risk</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {orders.slice(0, 8).map(order => (
-                <tr key={order.rowIndex} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-3 text-slate-400 font-mono text-xs">{order.no}</td>
-                  <td className="px-6 py-3 font-medium text-slate-800">{order.customer}</td>
-                  <td className="px-4 py-3 text-slate-600">{order.qty}</td>
-                  <td className="px-4 py-3 text-slate-600">{order.paket1} {order.paket2}</td>
-                  <td className="px-4 py-3 text-slate-600">{formatDate(order.tglSelesai || order.dlCust)}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${STATUS_STYLES[order.status]}`}>
-                      {STATUS_LABELS[order.status]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${RISK_STYLES[order.riskLevel || 'NORMAL']}`}>
-                      {RISK_LABELS[order.riskLevel || 'NORMAL']}
-                    </span>
-                  </td>
-                </tr>
+
+        {sortedMonths.length === 0 ? (
+          <div className="px-6 py-8 text-center text-slate-400 text-sm">Belum ada data order</div>
+        ) : (
+          <>
+            {/* Month tabs */}
+            <div className="px-6 pt-3 pb-0 flex gap-2 overflow-x-auto border-b border-slate-100">
+              {sortedMonths.map(mk => (
+                <button
+                  key={mk}
+                  onClick={() => { setSelectedMonth(mk); setOrderPage(1); }}
+                  className={`shrink-0 px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors
+                    ${mk === activeMonth
+                      ? 'border-indigo-500 text-indigo-600 bg-indigo-50/60'
+                      : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+                >
+                  {monthLabel(mk)}
+                  <span className={`ml-1.5 text-xs rounded-full px-1.5 py-0.5 tabular-nums
+                    ${mk === activeMonth ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
+                    {Array.from(monthsMap.get(mk)!.values()).reduce((s, a) => s + a.length, 0)}
+                  </span>
+                </button>
               ))}
-              {orders.length === 0 && (
-                <tr><td colSpan={7} className="px-6 py-8 text-center text-slate-400">Belum ada data order</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+            </div>
+
+            {/* Date rows */}
+            <div className="divide-y divide-slate-50">
+              {pagedDates.map(([dateKey, dateOrders]) => {
+                const totalQty = dateOrders.reduce((s, o) => s + o.qty, 0);
+                const RISK_RANK: Record<string, number> = { OVERDUE: 4, HIGH: 3, NEAR: 2, NORMAL: 1, SAFE: 0 };
+                const worstRisk = dateOrders.reduce<string>((w, o) => (RISK_RANK[o.riskLevel || 'NORMAL'] > RISK_RANK[w] ? (o.riskLevel || 'NORMAL') : w), 'SAFE');
+                const allDone = dateOrders.every(o => o.status === 'DONE');
+                const statusSummary = allDone ? 'Selesai' : `${dateOrders.filter(o => o.status !== 'DONE').length} aktif`;
+                return (
+                  <div key={dateKey} className="px-6 py-3.5 flex items-center gap-4 hover:bg-slate-50 transition-colors">
+                    <div className="w-28 shrink-0 text-sm font-semibold text-slate-700">{formatDate(dateKey)}</div>
+                    <div className="flex-1 flex flex-wrap gap-1.5 min-w-0">
+                      {dateOrders.map(o => (
+                        <span key={o.rowIndex} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full whitespace-nowrap">
+                          {o.customer} <span className="text-slate-400">{o.qty}</span>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="shrink-0 text-sm font-semibold text-slate-600 tabular-nums w-16 text-right">{totalQty} pcs</div>
+                    <div className="shrink-0 w-20 text-right">
+                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${allDone ? STATUS_STYLES['DONE'] : STATUS_STYLES['IN_PROGRESS']}`}>
+                        {statusSummary}
+                      </span>
+                    </div>
+                    <div className="shrink-0 w-20 text-right">
+                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${RISK_STYLES[worstRisk]}`}>
+                        {RISK_LABELS[worstRisk]}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Pagination — only when month orders > 8 */}
+            {totalPages > 1 && (
+              <div className="px-6 py-3 border-t border-slate-100 flex items-center justify-center">
+                <PaginationBar current={orderPage} total={totalPages} onChange={p => setOrderPage(p)} />
+              </div>
+            )}
+          </>
+        )}
       </div>
+    </div>
+  );
+}
+
+function PaginationBar({ current, total, onChange }: { current: number; total: number; onChange: (p: number) => void }) {
+  const pages: (number | '...')[] = [];
+  if (total <= 7) {
+    for (let i = 1; i <= total; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    if (current > 3) pages.push('...');
+    for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) pages.push(i);
+    if (current < total - 2) pages.push('...');
+    pages.push(total);
+  }
+
+  const btn = (label: React.ReactNode, page: number, active = false, disabled = false) => (
+    <button
+      key={String(label)}
+      onClick={() => !disabled && onChange(page)}
+      disabled={disabled}
+      className={`min-w-[32px] h-8 px-2 rounded-lg text-sm font-medium transition-colors
+        ${active ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'}
+        ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="flex items-center gap-1">
+      {btn('‹ Back', current - 1, false, current === 1)}
+      {pages.map((p, i) =>
+        p === '...'
+          ? <span key={`ellipsis-${i}`} className="px-1 text-slate-400 text-sm select-none">…</span>
+          : btn(p, p, p === current)
+      )}
+      {btn('Next ›', current + 1, false, current === total)}
     </div>
   );
 }

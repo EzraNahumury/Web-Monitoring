@@ -7,6 +7,139 @@ import { Order, OrderStatus } from '@/lib/types';
 import { STAGES, RISK_STYLES, RISK_LABELS, STATUS_STYLES, STATUS_LABELS } from '@/lib/constants';
 import { formatDate, getProgressPercent, getCurrentStage } from '@/lib/utils';
 
+async function generateOrderPDF(orders: Order[], type: 'weekly' | 'monthly', parseMonthKey: (s: string) => string) {
+  const { default: jsPDF } = await import('jspdf');
+  const { default: autoTable } = await import('jspdf-autotable');
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const BULAN_FULL = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const BULAN_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+
+  let reportOrders: Order[];
+  let title: string;
+  let fileName: string;
+
+  if (type === 'monthly') {
+    const yr = today.getFullYear(), mo = today.getMonth();
+    const key = `${yr}-${String(mo + 1).padStart(2, '0')}`;
+    reportOrders = orders.filter(o => parseMonthKey(o.tglSelesai || o.dlCust || '') === key);
+    title = `CRM AYRES ${BULAN_FULL[mo].toUpperCase()} ${yr}`;
+    fileName = `laporan-bulanan-${yr}-${String(mo + 1).padStart(2, '0')}.pdf`;
+  } else {
+    const day = today.getDay();
+    const mon = new Date(today);
+    mon.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
+    const sat = new Date(mon);
+    sat.setDate(mon.getDate() + 5);
+    reportOrders = orders.filter(o => {
+      const dateStr = o.dpProduksi || '';
+      if (!dateStr) return false;
+      let d: Date;
+      if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
+        const [dd, mm, yy] = dateStr.split('/');
+        d = new Date(+yy, +mm - 1, +dd);
+      } else {
+        d = new Date(dateStr);
+      }
+      return !isNaN(d.getTime()) && d >= mon && d <= sat;
+    });
+    const fmtD = (d: Date) => `${d.getDate()} ${BULAN_SHORT[d.getMonth()]} ${d.getFullYear()}`;
+    title = `CRM AYRES MINGGU ${fmtD(mon)} - ${fmtD(sat)}`;
+    fileName = `laporan-mingguan-${today.getFullYear()}-W${String(mon.getDate()).padStart(2,'0')}.pdf`;
+  }
+
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.text(title, pageW / 2, 14, { align: 'center' });
+
+  const chk = (v: boolean) => v ? '✓' : '-';
+
+  autoTable(doc, {
+    startY: 20,
+    margin: { left: 8, right: 8 },
+    columns: [
+      { header: 'NO', dataKey: 'no' },
+      { header: 'CUSTOMER', dataKey: 'customer' },
+      { header: 'QTY', dataKey: 'qty' },
+      { header: 'PAKET', dataKey: 'paket' },
+      { header: 'KETERANGAN', dataKey: 'ket' },
+      { header: 'BAHAN', dataKey: 'bahan' },
+      { header: 'DP PRODUKSI', dataKey: 'dp' },
+      { header: 'DL CUST & PRODUKSI', dataKey: 'dl' },
+      { header: 'NO WORK ORDER', dataKey: 'wo' },
+      { header: 'PROOFING', dataKey: 'p1' },
+      { header: 'WAITINGLIST', dataKey: 'p2' },
+      { header: 'PRINT', dataKey: 'p3' },
+      { header: 'PRES', dataKey: 'p4' },
+      { header: 'CUT FABRIC', dataKey: 'p5' },
+      { header: 'JAHIT', dataKey: 'p6' },
+      { header: 'QC JAHIT DAN STEAM', dataKey: 'p7' },
+      { header: 'FINISHING', dataKey: 'p8' },
+      { header: 'PENGIRIMAN', dataKey: 'p9' },
+    ],
+    body: reportOrders.map((o, i) => ({
+      no: i + 1,
+      customer: o.customer,
+      qty: o.qty,
+      paket: `${o.paket1} ${o.paket2}`,
+      ket: o.keterangan || '-',
+      bahan: o.bahan || '-',
+      dp: formatDate(o.dpProduksi),
+      dl: formatDate(o.dlCust),
+      wo: o.noWorkOrder || '-',
+      p1: chk(o.progress.PROOFING),
+      p2: chk(o.progress.WAITINGLIST),
+      p3: chk(o.progress.PRINT),
+      p4: chk(o.progress.PRES),
+      p5: chk(o.progress.CUT_FABRIC),
+      p6: chk(o.progress.JAHIT),
+      p7: chk(o.progress.QC_JAHIT_STEAM),
+      p8: chk(o.progress.FINISHING),
+      p9: chk(o.progress.PENGIRIMAN),
+    })),
+    styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
+    headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold', fontSize: 7, halign: 'center' },
+    didParseCell: (data) => {
+      if (data.column.index >= 9 && data.section === 'body') {
+        if (data.cell.raw === '\u2713') {
+          data.cell.styles.fontSize = 10;
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.textColor = [22, 163, 74];
+        } else {
+          data.cell.styles.textColor = [180, 180, 180];
+        }
+      }
+    },
+    columnStyles: {
+      0:  { cellWidth: 7 },
+      1:  { cellWidth: 22 },
+      2:  { cellWidth: 8, halign: 'center' },
+      3:  { cellWidth: 14, halign: 'center' },
+      4:  { cellWidth: 28 },
+      5:  { cellWidth: 14 },
+      6:  { cellWidth: 17, halign: 'center' },
+      7:  { cellWidth: 20, halign: 'center' },
+      8:  { cellWidth: 17 },
+      9:  { cellWidth: 14, halign: 'center' },
+      10: { cellWidth: 15, halign: 'center' },
+      11: { cellWidth: 11, halign: 'center' },
+      12: { cellWidth: 9,  halign: 'center' },
+      13: { cellWidth: 15, halign: 'center' },
+      14: { cellWidth: 10, halign: 'center' },
+      15: { cellWidth: 18, halign: 'center' },
+      16: { cellWidth: 13, halign: 'center' },
+      17: { cellWidth: 14, halign: 'center' },
+    },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+  });
+
+  doc.save(fileName);
+}
+
 export default function OrdersPage() {
   const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -15,7 +148,11 @@ export default function OrdersPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'ALL'>('ALL');
   const [riskFilter, setRiskFilter] = useState('ALL');
+  const [monthFilter, setMonthFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
   const [selected, setSelected] = useState<Order | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
 
   useEffect(() => { fetchOrders(false); }, []);
 
@@ -30,6 +167,23 @@ export default function OrdersPage() {
     setLoading(false);
   }
 
+  const parseMonthKey = (s: string) => {
+    if (!s) return '';
+    const parts = s.split('/');
+    if (parts.length === 3) return `${parts[2]}-${parts[1].padStart(2, '0')}`;
+    const d = new Date(s); return isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  };
+  const monthLabel = (key: string) => {
+    const [y, m] = key.split('-');
+    const BULAN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    return `${BULAN[+m - 1]} ${y}`;
+  };
+
+  const sortedMonths = useMemo(() => {
+    const keys = new Set(orders.map(o => parseMonthKey(o.tglSelesai || o.dlCust || '')).filter(Boolean));
+    return Array.from(keys).sort();
+  }, [orders]);
+
   const filtered = useMemo(() => {
     return orders.filter(o => {
       const matchSearch = !search || o.customer.toLowerCase().includes(search.toLowerCase()) ||
@@ -37,9 +191,16 @@ export default function OrdersPage() {
         o.keterangan?.toLowerCase().includes(search.toLowerCase());
       const matchStatus = statusFilter === 'ALL' || o.status === statusFilter;
       const matchRisk = riskFilter === 'ALL' || o.riskLevel === riskFilter;
-      return matchSearch && matchStatus && matchRisk;
+      const matchMonth = !monthFilter || parseMonthKey(o.tglSelesai || o.dlCust || '') === monthFilter;
+      return matchSearch && matchStatus && matchRisk && matchMonth;
     });
-  }, [orders, search, statusFilter, riskFilter]);
+  }, [orders, search, statusFilter, riskFilter, monthFilter]);
+
+  // Reset to page 1 whenever filters change
+  useEffect(() => { setPage(1); }, [search, statusFilter, riskFilter, monthFilter]);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   if (loading) return <TableSkeleton />;
   if (error) return (
@@ -94,18 +255,58 @@ export default function OrdersPage() {
           </select>
         </div>
 
-        {/* Action button */}
-        {user?.role === 'cs' && (
-          <Link
-            href="/orders/new"
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shadow-sm"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
-            </svg>
-            Input Order
-          </Link>
-        )}
+        {/* Action buttons */}
+        <div className="flex items-center gap-2">
+          {user?.role === 'admin' && (
+            <div className="relative">
+              <button
+                onClick={() => setExportOpen(o => !o)}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shadow-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                Export PDF
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
+                </svg>
+              </button>
+              {exportOpen && (
+                <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-20 py-1 min-w-[168px]">
+                  <button
+                    onClick={() => { generateOrderPDF(orders, 'weekly', parseMonthKey); setExportOpen(false); }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    Laporan Mingguan
+                  </button>
+                  <button
+                    onClick={() => { generateOrderPDF(orders, 'monthly', parseMonthKey); setExportOpen(false); }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    Laporan Bulanan
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {user?.role === 'cs' && (
+            <Link
+              href="/orders/new"
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shadow-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+              </svg>
+              Input Order
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Summary badges */}
@@ -124,6 +325,35 @@ export default function OrdersPage() {
           </span>
         )}
       </div>
+
+      {/* Month tabs */}
+      {sortedMonths.length > 0 && (
+        <div className="flex gap-1 overflow-x-auto pb-0.5">
+          <button
+            onClick={() => setMonthFilter('')}
+            className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors border
+              ${!monthFilter ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700'}`}
+          >
+            Semua
+          </button>
+          {sortedMonths.map(mk => {
+            const count = orders.filter(o => parseMonthKey(o.tglSelesai || o.dlCust || '') === mk).length;
+            return (
+              <button
+                key={mk}
+                onClick={() => setMonthFilter(mk)}
+                className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors border
+                  ${monthFilter === mk ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700'}`}
+              >
+                {monthLabel(mk)}
+                <span className={`ml-1.5 text-xs tabular-nums ${monthFilter === mk ? 'opacity-80' : 'text-slate-400'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -146,7 +376,7 @@ export default function OrdersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filtered.map(order => (
+              {paged.map(order => (
                 <tr key={order.rowIndex} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setSelected(order)}>
                   <td className="px-4 py-3 text-slate-400 font-mono text-xs">{order.no}</td>
                   <td className="px-4 py-3">
@@ -210,12 +440,50 @@ export default function OrdersPage() {
             </tbody>
           </table>
         </div>
+        {totalPages > 1 && (
+          <div className="px-6 py-3 border-t border-slate-100 flex items-center justify-between gap-4">
+            <span className="text-xs text-slate-400 tabular-nums">
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} dari {filtered.length} order
+            </span>
+            <OrderPaginationBar current={page} total={totalPages} onChange={setPage} />
+          </div>
+        )}
       </div>
 
       {/* Detail modal */}
       {selected && (
         <OrderDetailModal order={selected} onClose={() => setSelected(null)} canEdit={user?.role === 'cs'} onSaved={fetchOrders} />
       )}
+    </div>
+  );
+}
+
+function OrderPaginationBar({ current, total, onChange }: { current: number; total: number; onChange: (p: number) => void }) {
+  const pages: (number | '...')[] = [];
+  if (total <= 7) {
+    for (let i = 1; i <= total; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    if (current > 3) pages.push('...');
+    for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) pages.push(i);
+    if (current < total - 2) pages.push('...');
+    pages.push(total);
+  }
+  const btn = (label: React.ReactNode, p: number, active = false, disabled = false) => (
+    <button key={String(label)} onClick={() => !disabled && onChange(p)} disabled={disabled}
+      className={`min-w-[32px] h-8 px-2 rounded-lg text-sm font-medium transition-colors
+        ${active ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'}
+        ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}>
+      {label}
+    </button>
+  );
+  return (
+    <div className="flex items-center gap-1">
+      {btn('‹ Back', current - 1, false, current === 1)}
+      {pages.map((p, i) => p === '...'
+        ? <span key={`el-${i}`} className="px-1 text-slate-400 text-sm select-none">…</span>
+        : btn(p, p, p === current))}
+      {btn('Next ›', current + 1, false, current === total)}
     </div>
   );
 }

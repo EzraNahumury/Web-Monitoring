@@ -16,9 +16,12 @@ export interface DayAllocation {
   extendPct: number;      // 0–100 of 100
   isNearFull: boolean;    // normalQty >= 150 && < 200
   isExtendFull: boolean;  // extendQty >= 100
+  overExtendQty: number;  // qty beyond NORMAL_CAP + EXTEND_CAP (300)
+  overExtendPct: number;  // 0–100+ relative to EXTEND_CAP
   customers: string[];
   isToday: boolean;
   isFull: boolean;        // normalQty >= 200
+  isPast: boolean;        // before today
 }
 
 function parseDateStr(s: string): Date | null {
@@ -36,12 +39,71 @@ function toDateKey(d: Date): string {
   return `${day < 10 ? '0' : ''}${day}/${mon < 10 ? '0' : ''}${mon}/${yr}`;
 }
 
+/** Groups orders by their dpProduksi date (no overflow to next day). Used for leaderboard. */
+export function computeScheduledAllocations(orders: Order[], days = 60): DayAllocation[] {
+  const dailyMap: Record<string, { qty: number; customers: Set<string> }> = {};
+
+  for (const order of orders) {
+    const start = parseDateStr(order.dpProduksi) || new Date();
+    start.setHours(0, 0, 0, 0);
+    // If dpProduksi falls on Sunday, move to Monday
+    while (start.getDay() === 0) start.setDate(start.getDate() + 1);
+    const key = toDateKey(start);
+    if (!dailyMap[key]) dailyMap[key] = { qty: 0, customers: new Set() };
+    dailyMap[key].qty += order.qty;
+    dailyMap[key].customers.add(order.customer);
+  }
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const todayKey = toDateKey(today);
+
+  const allKeys = new Set<string>();
+  for (let i = 0; i < days; i++) {
+    const d = new Date(today); d.setDate(d.getDate() + i);
+    if (d.getDay() !== 0) allKeys.add(toDateKey(d)); // skip Sunday
+  }
+  Object.keys(dailyMap).forEach(k => allKeys.add(k));
+
+  return Array.from(allKeys)
+    .sort((a, b) => {
+      const da = parseDateStr(a)!, db = parseDateStr(b)!;
+      return da.getTime() - db.getTime();
+    })
+    .map(key => {
+      const d = parseDateStr(key)!;
+      const data = dailyMap[key] || { qty: 0, customers: new Set() };
+      const normalQty = Math.min(data.qty, NORMAL_CAP);
+      const extendQty = Math.min(Math.max(0, data.qty - NORMAL_CAP), EXTEND_CAP);
+      const overExtendQty = Math.max(0, data.qty - NORMAL_CAP - EXTEND_CAP);
+      const normalPct = Math.round((normalQty / NORMAL_CAP) * 100);
+      return {
+        dateKey: key,
+        dateDisplay: d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' }),
+        qty: data.qty,
+        pct: normalPct,
+        normalQty,
+        extendQty,
+        overExtendQty,
+        normalPct,
+        extendPct: extendQty > 0 ? Math.round((extendQty / EXTEND_CAP) * 100) : 0,
+        overExtendPct: overExtendQty > 0 ? Math.min(Math.round((overExtendQty / EXTEND_CAP) * 100), 100) : 0,
+        isNearFull: normalQty >= 150 && normalQty < NORMAL_CAP,
+        isExtendFull: extendQty >= EXTEND_CAP,
+        customers: Array.from(data.customers),
+        isToday: key === todayKey,
+        isFull: data.qty >= NORMAL_CAP,
+        isPast: d < today,
+      };
+    });
+}
+
+/** Overflow-based allocation queue. Used for monthly calendar visualization. */
 export function computeAllocations(orders: Order[], days = 45): DayAllocation[] {
   const TOTAL_CAP = NORMAL_CAP + EXTEND_CAP; // 300 pcs/day (200 normal + 100 extend)
   const dailyMap: Record<string, { qty: number; customers: Set<string> }> = {};
 
   const active = orders
-    .filter(o => o.status !== 'DONE')
+    .slice()
     .sort((a, b) => {
       const da = parseDateStr(a.dpProduksi), db = parseDateStr(b.dpProduksi);
       if (!da && !db) return 0;
@@ -53,8 +115,11 @@ export function computeAllocations(orders: Order[], days = 45): DayAllocation[] 
     let remaining = order.qty;
     const start = parseDateStr(order.dpProduksi) || new Date();
     const cur = new Date(start); cur.setHours(0, 0, 0, 0);
+    // Start on a working day
+    while (cur.getDay() === 0) cur.setDate(cur.getDate() + 1);
     let safety = 0;
-    while (remaining > 0 && safety++ < 365) {
+    while (remaining > 0 && safety++ < 500) {
+      if (cur.getDay() === 0) { cur.setDate(cur.getDate() + 1); continue; } // skip Sunday
       const key = toDateKey(cur);
       if (!dailyMap[key]) dailyMap[key] = { qty: 0, customers: new Set() };
       const avail = TOTAL_CAP - dailyMap[key].qty;
@@ -71,16 +136,13 @@ export function computeAllocations(orders: Order[], days = 45): DayAllocation[] 
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const todayKey = toDateKey(today);
 
-  // Include today + next `days` days AND any future allocated days
+  // Include today + next `days` working days AND all allocated days (past or future)
   const allKeys = new Set<string>();
   for (let i = 0; i < days; i++) {
     const d = new Date(today); d.setDate(d.getDate() + i);
-    allKeys.add(toDateKey(d));
+    if (d.getDay() !== 0) allKeys.add(toDateKey(d)); // skip Sunday
   }
-  Object.keys(dailyMap).forEach(k => {
-    const d = parseDateStr(k);
-    if (d && d >= today) allKeys.add(k);
-  });
+  Object.keys(dailyMap).forEach(k => allKeys.add(k));
 
   return Array.from(allKeys)
     .sort((a, b) => {
@@ -102,11 +164,14 @@ export function computeAllocations(orders: Order[], days = 45): DayAllocation[] 
         extendQty,
         normalPct,
         extendPct: extendQty > 0 ? Math.round((extendQty / EXTEND_CAP) * 100) : 0,
+        overExtendQty: 0,
+        overExtendPct: 0,
         isNearFull: normalQty >= 150 && normalQty < NORMAL_CAP,
         isExtendFull: extendQty >= EXTEND_CAP,
         customers: Array.from(data.customers),
         isToday: key === todayKey,
         isFull: data.qty >= NORMAL_CAP,
+        isPast: d < today,
       };
     });
 }

@@ -15,6 +15,7 @@ export default function ProductionPage() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'ACTIVE' | 'OVERDUE' | 'NEAR'>('ALL');
+  const [dateFilter, setDateFilter] = useState('');
   const [expanded, setExpanded] = useState<number | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
   const [tglKirim, setTglKirim] = useState('');
@@ -46,6 +47,18 @@ export default function ProductionPage() {
 
   const canEdit = user?.role === 'produksi' || user?.role === 'admin';
 
+  const parseDateMs = (s: string) => {
+    if (!s) return Infinity;
+    const p = s.split('/');
+    if (p.length === 3) return new Date(+p[2], +p[1] - 1, +p[0]).getTime();
+    const d = new Date(s); return isNaN(d.getTime()) ? Infinity : d.getTime();
+  };
+
+  const sortedDates = useMemo(() => {
+    const keys = new Set(orders.filter(o => o.status !== 'DONE').map(o => o.tglSelesai || o.dlCust || '').filter(Boolean));
+    return Array.from(keys).sort((a, b) => parseDateMs(a) - parseDateMs(b));
+  }, [orders]);
+
   const filtered = useMemo(() => {
     return orders
       .filter(o => o.status !== 'DONE' || filter === 'ALL')
@@ -56,14 +69,14 @@ export default function ProductionPage() {
         return true;
       })
       .filter(o => !search || o.customer.toLowerCase().includes(search.toLowerCase()) || o.noWorkOrder?.toLowerCase().includes(search.toLowerCase()))
+      .filter(o => !dateFilter || (o.tglSelesai || o.dlCust || '') === dateFilter)
       .sort((a, b) => {
-        // Sort by risk: OVERDUE > HIGH > NEAR > IN_PROGRESS > OPEN > DONE
         const riskOrder = { OVERDUE: 0, HIGH: 1, NEAR: 2, NORMAL: 3, SAFE: 4 };
         const ra = riskOrder[a.riskLevel || 'NORMAL'] ?? 3;
         const rb = riskOrder[b.riskLevel || 'NORMAL'] ?? 3;
         return ra - rb;
       });
-  }, [orders, search, filter]);
+  }, [orders, search, filter, dateFilter]);
 
   async function handleCheck(order: Order, stageKey: string, checked: boolean) {
     if (!canEdit) return;
@@ -158,6 +171,40 @@ export default function ProductionPage() {
           </svg>
         </button>
       </div>
+
+      {/* Date tabs */}
+      {sortedDates.length > 0 && (
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+          <button
+            onClick={() => setDateFilter('')}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border
+              ${!dateFilter ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700'}`}
+          >
+            Semua tgl
+          </button>
+          {sortedDates.map(dk => {
+            const count = orders.filter(o => o.status !== 'DONE' && (o.tglSelesai || o.dlCust || '') === dk).length;
+            const hasOverdue = orders.some(o => (o.tglSelesai || o.dlCust || '') === dk && (o.riskLevel === 'OVERDUE' || o.riskLevel === 'HIGH'));
+            return (
+              <button
+                key={dk}
+                onClick={() => setDateFilter(dk)}
+                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border
+                  ${dateFilter === dk
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : hasOverdue
+                    ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                    : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 hover:text-slate-700'}`}
+              >
+                {formatDate(dk)}
+                <span className={`ml-1 tabular-nums ${dateFilter === dk ? 'opacity-80' : hasOverdue ? 'text-red-400' : 'text-slate-400'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Count badges */}
       <div className="flex flex-wrap gap-2 text-xs">
