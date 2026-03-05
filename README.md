@@ -105,9 +105,9 @@ Halaman ini terdiri dari dua komponen utama yang menggunakan **sumber data berbe
 - Navigasi dengan tombol **↑ (hari sebelumnya)** dan **↓ (hari berikutnya)**, bisa scroll hingga 30 hari ke belakang
 - Qty setiap order dihitung **tepat di tanggal dpProduksi-nya** (tidak overflow ke hari berikutnya)
 - Jika total melebihi 300 pcs, muncul bar ke-3 **Over Extend** (ungu) dengan badge **OVER**
-- Tombol **Export PDF** (admin only) — tersedia dua pilihan laporan:
-  - **Laporan Mingguan:** semua hari di minggu berjalan (Senin–Sabtu)
-  - **Laporan Bulanan:** semua hari di bulan yang sedang ditampilkan di kalender
+- Tombol **Export PDF** (admin only) di header Leaderboard — tersedia dua pilihan:
+  - **Laporan 2 Mingguan:** semua hari dari Senin minggu ini s/d Sabtu minggu depan (14 hari)
+  - **Laporan Bulanan:** semua hari di bulan yang sedang ditampilkan di kalender bulanan
 
 **Tampilan bar per hari:**
 
@@ -156,7 +156,7 @@ Leaderboard mengelompokkan berdasarkan **dpProduksi** tanpa overflow, sedangkan 
 - Pagination 10 order per halaman
 - Klik baris untuk lihat detail order beserta progress tahapan
 - **Export PDF** (admin only) — tombol hijau di kanan atas, dua pilihan:
-  - **Laporan Mingguan:** order yang `dpProduksi`-nya jatuh di minggu berjalan (Senin–Sabtu)
+  - **Laporan 2 Mingguan:** order yang `dpProduksi`-nya jatuh dari Senin minggu ini s/d Sabtu minggu depan
   - **Laporan Bulanan:** order yang deadline-nya (`tglSelesai` / `dlCust`) jatuh di bulan berjalan
 
 **Format PDF ekspor (landscape A4):**
@@ -172,7 +172,7 @@ Leaderboard mengelompokkan berdasarkan **dpProduksi** tanpa overflow, sedangkan 
 | DP PRODUKSI | Tanggal mulai produksi |
 | DL CUST & PRODUKSI | Deadline customer |
 | NO WORK ORDER | Kode WO |
-| PROOFING — PENGIRIMAN | Stage checklist: `✓` = selesai, `-` = belum |
+| PROOFING — PENGIRIMAN | Stage checklist: ikon centang hijau = selesai, `-` abu-abu = belum |
 
 ---
 

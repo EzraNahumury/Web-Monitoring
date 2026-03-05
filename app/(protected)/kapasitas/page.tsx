@@ -38,14 +38,14 @@ async function generateCapacityPDF(
   } else {
     const day = today.getDay();
     const mon = new Date(today); mon.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
-    const sat = new Date(mon); sat.setDate(mon.getDate() + 5);
+    const sat = new Date(mon); sat.setDate(mon.getDate() + 12); // 2 weeks: Mon to Sat of next week
     rows = allocations.filter(d => {
       const date = parseKey(d.dateKey);
       return date >= mon && date <= sat;
     });
     const fmtD = (d: Date) => `${d.getDate()} ${BULAN_SHORT[d.getMonth()]} ${d.getFullYear()}`;
-    title = `Laporan Kapasitas Mingguan — ${fmtD(mon)} s/d ${fmtD(sat)}`;
-    fileName = `kapasitas-mingguan-${today.getFullYear()}-${String(mon.getDate()).padStart(2,'0')}${BULAN_SHORT[mon.getMonth()]}.pdf`;
+    title = `Laporan Kapasitas 2 Mingguan — ${fmtD(mon)} s/d ${fmtD(sat)}`;
+    fileName = `kapasitas-2mingguan-${today.getFullYear()}-${String(mon.getDate()).padStart(2,'0')}${BULAN_SHORT[mon.getMonth()]}.pdf`;
   }
 
   rows = [...rows].sort((a, b) => parseKey(a.dateKey).getTime() - parseKey(b.dateKey).getTime());
@@ -290,7 +290,7 @@ export default function KapasitasPage() {
                       <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                       </svg>
-                      Laporan Mingguan
+                      Laporan 2 Mingguan
                     </button>
                     <button
                       onClick={() => { generateCapacityPDF(allocations, 'monthly', viewYear, viewMonth); setExportOpen(false); }}

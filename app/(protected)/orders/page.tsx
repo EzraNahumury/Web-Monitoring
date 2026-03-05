@@ -31,7 +31,7 @@ async function generateOrderPDF(orders: Order[], type: 'weekly' | 'monthly', par
     const mon = new Date(today);
     mon.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
     const sat = new Date(mon);
-    sat.setDate(mon.getDate() + 5);
+    sat.setDate(mon.getDate() + 12); // 2 weeks: Mon to Sat of next week
     reportOrders = orders.filter(o => {
       const dateStr = o.dpProduksi || '';
       if (!dateStr) return false;
@@ -45,8 +45,8 @@ async function generateOrderPDF(orders: Order[], type: 'weekly' | 'monthly', par
       return !isNaN(d.getTime()) && d >= mon && d <= sat;
     });
     const fmtD = (d: Date) => `${d.getDate()} ${BULAN_SHORT[d.getMonth()]} ${d.getFullYear()}`;
-    title = `CRM AYRES MINGGU ${fmtD(mon)} - ${fmtD(sat)}`;
-    fileName = `laporan-mingguan-${today.getFullYear()}-W${String(mon.getDate()).padStart(2,'0')}.pdf`;
+    title = `CRM AYRES 2 MINGGUAN ${fmtD(mon)} - ${fmtD(sat)}`;
+    fileName = `laporan-2mingguan-${today.getFullYear()}-${String(mon.getDate()).padStart(2,'0')}${BULAN_SHORT[mon.getMonth()]}.pdf`;
   }
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -106,12 +106,25 @@ async function generateOrderPDF(orders: Order[], type: 'weekly' | 'monthly', par
     didParseCell: (data) => {
       if (data.column.index >= 9 && data.section === 'body') {
         if (data.cell.raw === '\u2713') {
-          data.cell.styles.fontSize = 10;
-          data.cell.styles.fontStyle = 'bold';
-          data.cell.styles.textColor = [22, 163, 74];
+          data.cell.text = ['']; // clear text, drawn manually in didDrawCell
         } else {
-          data.cell.styles.textColor = [180, 180, 180];
+          data.cell.styles.textColor = [200, 200, 200];
         }
+      }
+    },
+    didDrawCell: (data) => {
+      if (data.column.index >= 9 && data.section === 'body' && data.cell.raw === '\u2713') {
+        const cx = data.cell.x + data.cell.width / 2;
+        const cy = data.cell.y + data.cell.height / 2;
+        const s = 1.6;
+        data.doc.setDrawColor(22, 163, 74);
+        data.doc.setLineWidth(0.55);
+        // left stroke (short, going down-right)
+        data.doc.line(cx - s, cy + s * 0.05, cx - s * 0.15, cy + s * 0.85);
+        // right stroke (long, going up-right)
+        data.doc.line(cx - s * 0.15, cy + s * 0.85, cx + s, cy - s * 0.75);
+        data.doc.setDrawColor(0);
+        data.doc.setLineWidth(0.2);
       }
     },
     columnStyles: {
@@ -280,7 +293,7 @@ export default function OrdersPage() {
                     <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                     </svg>
-                    Laporan Mingguan
+                    Laporan 2 Mingguan
                   </button>
                   <button
                     onClick={() => { generateOrderPDF(orders, 'monthly', parseMonthKey); setExportOpen(false); }}
