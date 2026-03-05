@@ -41,7 +41,11 @@ export default function DashboardPage() {
   }
 
   const warningOrders = orders.filter(o => o.riskLevel === 'HIGH' || o.riskLevel === 'OVERDUE' || o.riskLevel === 'NEAR');
-  const capacityPct = stats ? Math.min(100, Math.round((stats.dailyCapacityUsed / 200) * 100)) : 0;
+  const normalUsed = stats ? Math.min(stats.dailyCapacityUsed, 200) : 0;
+  const extendUsed = stats ? Math.min(Math.max(0, stats.dailyCapacityUsed - 200), 100) : 0;
+  const normalPct = Math.round((normalUsed / 200) * 100);
+  const extendPct = extendUsed > 0 ? Math.round((extendUsed / 100) * 100) : 0;
+  const isNearFull = normalUsed >= 150 && normalUsed < 200;
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={fetchData} />;
@@ -74,7 +78,7 @@ export default function DashboardPage() {
         <StatCard
           label="Kapasitas Hari Ini"
           value={stats?.dailyCapacityUsed ?? 0}
-          sub={`dari 200 pcs (${capacityPct}%)`}
+          sub={`normal ${normalPct}% · extend ${extendUsed} pcs`}
           color="green"
           icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>}
         />
@@ -120,17 +124,44 @@ export default function DashboardPage() {
 
           {/* Capacity bar */}
           <div className="mt-6 pt-5 border-t border-slate-100">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-slate-700">Kapasitas Harian</span>
-              <span className="text-sm font-bold text-slate-800">{stats?.dailyCapacityUsed ?? 0} / 200 pcs</span>
+              <span className="text-sm font-bold text-slate-800">{stats?.dailyCapacityUsed ?? 0} pcs</span>
             </div>
-            <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${capacityPct >= 90 ? 'bg-red-500' : capacityPct >= 70 ? 'bg-amber-500' : 'bg-green-500'}`}
-                style={{ width: `${capacityPct}%` }}
-              />
+            <div className="flex gap-3 items-end">
+              {/* Normal bar */}
+              <div className="flex-[2]">
+                <div className="flex items-center gap-1 mb-1">
+                  <span className="text-xs text-slate-400">Normal</span>
+                  {isNearFull && <span className="text-xs" title="Mendekati penuh">⚠️</span>}
+                  <span className={`ml-auto text-xs font-bold tabular-nums ${normalUsed >= 200 ? 'text-red-600' : isNearFull ? 'text-amber-600' : 'text-slate-600'}`}>
+                    {normalUsed}/200
+                  </span>
+                </div>
+                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${normalUsed >= 200 ? 'bg-red-500' : isNearFull ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                    style={{ width: `${normalPct}%` }}
+                  />
+                </div>
+              </div>
+              {/* Extend bar */}
+              <div className="flex-1">
+                <div className="flex items-center gap-1 mb-1">
+                  <span className="text-xs text-slate-400">Extend</span>
+                  <span className={`ml-auto text-xs font-bold tabular-nums ${extendUsed >= 100 ? 'text-red-600' : extendUsed > 0 ? 'text-orange-600' : 'text-slate-400'}`}>
+                    {extendUsed}/100
+                  </span>
+                </div>
+                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${extendUsed >= 100 ? 'bg-red-400' : extendUsed > 0 ? 'bg-orange-400' : ''}`}
+                    style={{ width: `${extendPct}%` }}
+                  />
+                </div>
+              </div>
             </div>
-            <p className="text-xs text-slate-400 mt-1">{200 - (stats?.dailyCapacityUsed ?? 0)} pcs slot tersisa hari ini</p>
+            <p className="text-xs text-slate-400 mt-1.5">{Math.max(0, 200 - normalUsed)} sisa normal · {Math.max(0, 100 - extendUsed)} sisa extend hari ini</p>
           </div>
         </div>
 

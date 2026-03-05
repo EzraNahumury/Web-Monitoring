@@ -2,14 +2,23 @@ import { Order, Progress, RiskLevel } from './types';
 import { STAGES } from './constants';
 
 // ─── Capacity Allocation ─────────────────────────────────
+export const NORMAL_CAP = 200;
+export const EXTEND_CAP = 100;
+
 export interface DayAllocation {
   dateKey: string;        // DD/MM/YYYY
   dateDisplay: string;    // "Sen, 2 Mar 2026"
   qty: number;
-  pct: number;            // % of 200
+  pct: number;            // % of NORMAL_CAP (200) — kept for compat
+  normalQty: number;      // min(qty, 200)
+  extendQty: number;      // max(0, qty-200) capped at 100
+  normalPct: number;      // 0–100 of 200
+  extendPct: number;      // 0–100 of 100
+  isNearFull: boolean;    // normalQty >= 150 && < 200
+  isExtendFull: boolean;  // extendQty >= 100
   customers: string[];
   isToday: boolean;
-  isFull: boolean;
+  isFull: boolean;        // normalQty >= 200
 }
 
 function parseDateStr(s: string): Date | null {
@@ -28,7 +37,7 @@ function toDateKey(d: Date): string {
 }
 
 export function computeAllocations(orders: Order[], days = 45): DayAllocation[] {
-  const DAILY_CAP = 200;
+  const TOTAL_CAP = NORMAL_CAP + EXTEND_CAP; // 300 pcs/day (200 normal + 100 extend)
   const dailyMap: Record<string, { qty: number; customers: Set<string> }> = {};
 
   const active = orders
@@ -48,7 +57,7 @@ export function computeAllocations(orders: Order[], days = 45): DayAllocation[] 
     while (remaining > 0 && safety++ < 365) {
       const key = toDateKey(cur);
       if (!dailyMap[key]) dailyMap[key] = { qty: 0, customers: new Set() };
-      const avail = DAILY_CAP - dailyMap[key].qty;
+      const avail = TOTAL_CAP - dailyMap[key].qty;
       if (avail > 0) {
         const alloc = Math.min(remaining, avail);
         dailyMap[key].qty += alloc;
@@ -81,14 +90,23 @@ export function computeAllocations(orders: Order[], days = 45): DayAllocation[] 
     .map(key => {
       const d = parseDateStr(key)!;
       const data = dailyMap[key] || { qty: 0, customers: new Set() };
+      const normalQty = Math.min(data.qty, NORMAL_CAP);
+      const extendQty = Math.min(Math.max(0, data.qty - NORMAL_CAP), EXTEND_CAP);
+      const normalPct = Math.round((normalQty / NORMAL_CAP) * 100);
       return {
         dateKey: key,
         dateDisplay: d.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' }),
         qty: data.qty,
-        pct: Math.min(100, Math.round((data.qty / DAILY_CAP) * 100)),
+        pct: normalPct,
+        normalQty,
+        extendQty,
+        normalPct,
+        extendPct: extendQty > 0 ? Math.round((extendQty / EXTEND_CAP) * 100) : 0,
+        isNearFull: normalQty >= 150 && normalQty < NORMAL_CAP,
+        isExtendFull: extendQty >= EXTEND_CAP,
         customers: Array.from(data.customers),
         isToday: key === todayKey,
-        isFull: data.qty >= DAILY_CAP,
+        isFull: data.qty >= NORMAL_CAP,
       };
     });
 }

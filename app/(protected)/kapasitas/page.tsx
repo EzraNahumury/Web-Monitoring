@@ -4,9 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { apiGetOrders, apiGetOrdersForce } from '@/lib/api';
 import { Order } from '@/lib/types';
-import { computeAllocations, DayAllocation } from '@/lib/utils';
-
-const DAILY_CAP = 200;
+import { computeAllocations, DayAllocation, NORMAL_CAP, EXTEND_CAP } from '@/lib/utils';
 
 export default function KapasitasPage() {
   const { user } = useAuth();
@@ -61,9 +59,9 @@ export default function KapasitasPage() {
         />
         <SummaryCard
           label="Kapasitas Hari Ini"
-          value={todayAlloc?.qty ?? 0}
-          sub={`dari ${DAILY_CAP} pcs (${todayAlloc?.pct ?? 0}%)`}
-          color={!todayAlloc || todayAlloc.qty === 0 ? 'green' : todayAlloc.pct >= 100 ? 'red' : todayAlloc.pct >= 75 ? 'amber' : 'green'}
+          value={todayAlloc?.normalQty ?? 0}
+          sub={`normal ${todayAlloc?.normalPct ?? 0}% · extend ${todayAlloc?.extendQty ?? 0} pcs`}
+          color={!todayAlloc || todayAlloc.normalQty === 0 ? 'green' : todayAlloc.isExtendFull ? 'red' : todayAlloc.isFull ? 'orange' : todayAlloc.isNearFull ? 'amber' : 'green'}
           icon="📅"
         />
         <SummaryCard
@@ -77,10 +75,10 @@ export default function KapasitasPage() {
 
       {/* Legend */}
       <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-slate-200 inline-block" /> 0 pcs</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-emerald-400 inline-block" /> 1–149 pcs</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-400 inline-block" /> 150–199 pcs</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500 inline-block" /> 200 pcs (penuh)</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" /> Normal 1–149</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-400 inline-block" /> ⚠ Mendekati penuh 150–199</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500 inline-block" /> Normal penuh 200</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-orange-400 inline-block" /> Extend/lembur (maks 100)</span>
         <div className="ml-auto">
           <button
             onClick={() => { setRefreshing(true); loadData(true); }}
@@ -100,7 +98,7 @@ export default function KapasitasPage() {
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <div>
             <h2 className="font-bold text-slate-800">Leaderboard Kapasitas Harian</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Kapasitas 200 pcs/hari · Overflow otomatis ke hari berikutnya</p>
+            <p className="text-xs text-slate-400 mt-0.5">Normal 200 pcs/hari · Extend (lembur) maks 100 pcs · Total maks 300 pcs/hari</p>
           </div>
         </div>
 
@@ -145,15 +143,16 @@ export default function KapasitasPage() {
           <h3 className="font-semibold text-slate-800 mb-4">Visualisasi Kapasitas</h3>
           <div className="flex flex-wrap gap-1.5">
             {allocations.slice(0, 60).map(day => {
-              const intensity = day.qty === 0 ? 'bg-slate-100' :
-                day.qty < 50 ? 'bg-emerald-200' :
-                day.qty < 100 ? 'bg-emerald-300' :
-                day.qty < 150 ? 'bg-emerald-400' :
-                day.qty < 200 ? 'bg-amber-400' : 'bg-red-500';
+              const intensity = day.normalQty === 0 ? 'bg-slate-100' :
+                day.normalQty < 50 ? 'bg-emerald-200' :
+                day.normalQty < 100 ? 'bg-emerald-300' :
+                day.normalQty < 150 ? 'bg-emerald-400' :
+                day.normalQty < 200 ? 'bg-amber-400' :
+                day.extendQty > 0 ? 'bg-orange-400' : 'bg-red-500';
               return (
                 <div
                   key={day.dateKey}
-                  title={`${day.dateDisplay}: ${day.qty}/${DAILY_CAP} pcs${day.customers.length ? '\n' + day.customers.join(', ') : ''}`}
+                  title={`${day.dateDisplay}: ${day.normalQty}/${NORMAL_CAP} normal${day.extendQty > 0 ? ` + ${day.extendQty}/${EXTEND_CAP} extend` : ''}${day.customers.length ? '\n' + day.customers.join(', ') : ''}`}
                   className={`w-7 h-7 rounded-md cursor-default transition-transform hover:scale-125 ${intensity} ${day.isToday ? 'ring-2 ring-indigo-500 ring-offset-1' : ''}`}
                 />
               );
@@ -167,39 +166,63 @@ export default function KapasitasPage() {
 }
 
 function DayRow({ day, rank }: { day: DayAllocation; rank: number }) {
-  const barColor = day.qty === 0 ? 'bg-slate-200' :
-    day.qty < 150 ? 'bg-emerald-500' :
-    day.qty < 200 ? 'bg-amber-500' : 'bg-red-500';
-
-  const sisa = DAILY_CAP - day.qty;
+  const normalBarColor =
+    day.normalQty === 0 ? 'bg-slate-200' :
+    day.normalQty < 150 ? 'bg-emerald-500' :
+    day.normalQty < 200 ? 'bg-amber-500' : 'bg-red-500';
 
   return (
     <div className={`px-6 py-4 flex items-center gap-4 hover:bg-slate-50 transition-colors ${day.isToday ? 'bg-indigo-50/60' : ''}`}>
-      {/* Rank / date */}
-      <div className="w-8 text-center">
+      {/* Rank */}
+      <div className="w-8 text-center shrink-0">
         <span className="text-xs font-bold text-slate-400">#{rank}</span>
       </div>
 
-      {/* Date info */}
-      <div className="w-36 shrink-0">
+      {/* Date */}
+      <div className="w-32 shrink-0">
         <div className={`text-sm font-semibold ${day.isToday ? 'text-indigo-700' : 'text-slate-700'}`}>
           {day.dateDisplay}
-          {day.isToday && <span className="ml-1.5 text-xs bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full font-bold">Hari ini</span>}
+          {day.isToday && <span className="ml-1 text-xs bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full font-bold">Hari ini</span>}
         </div>
       </div>
 
-      {/* Bar */}
-      <div className="flex-1">
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${barColor}`}
-              style={{ width: `${day.pct}%` }}
-            />
+      {/* Dual bars */}
+      <div className="flex-1 min-w-0">
+        <div className="flex gap-3 items-end">
+          {/* Normal bar */}
+          <div className="flex-[2] min-w-0">
+            <div className="flex items-center gap-1 mb-1">
+              <span className="text-xs text-slate-400 font-medium">Normal</span>
+              {day.isNearFull && (
+                <span title="Mendekati kapasitas penuh" className="text-xs leading-none">⚠️</span>
+              )}
+              <span className={`ml-auto text-xs font-bold tabular-nums ${day.isFull ? 'text-red-600' : day.isNearFull ? 'text-amber-600' : 'text-slate-600'}`}>
+                {day.normalQty}/{NORMAL_CAP}
+              </span>
+            </div>
+            <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${normalBarColor}`}
+                style={{ width: `${day.normalPct}%` }}
+              />
+            </div>
           </div>
-          <span className={`text-sm font-bold tabular-nums w-24 text-right shrink-0 ${day.isFull ? 'text-red-600' : day.qty >= 150 ? 'text-amber-600' : 'text-slate-700'}`}>
-            {day.qty} / {DAILY_CAP}
-          </span>
+
+          {/* Extend bar */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1 mb-1">
+              <span className="text-xs text-slate-400 font-medium">Extend</span>
+              <span className={`ml-auto text-xs font-bold tabular-nums ${day.isExtendFull ? 'text-red-600' : day.extendQty > 0 ? 'text-orange-600' : 'text-slate-400'}`}>
+                {day.extendQty}/{EXTEND_CAP}
+              </span>
+            </div>
+            <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${day.extendQty > 0 ? (day.isExtendFull ? 'bg-red-400' : 'bg-orange-400') : ''}`}
+                style={{ width: `${day.extendPct}%` }}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Customer tags */}
@@ -212,12 +235,14 @@ function DayRow({ day, rank }: { day: DayAllocation; rank: number }) {
         )}
       </div>
 
-      {/* Sisa */}
-      <div className="w-24 text-right shrink-0">
-        {day.isFull ? (
-          <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full font-semibold">PENUH</span>
-        ) : (
-          <span className="text-xs text-slate-400">{sisa} sisa</span>
+      {/* Status badge */}
+      <div className="w-20 text-right shrink-0">
+        {day.isExtendFull ? (
+          <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full font-semibold">FULL</span>
+        ) : day.isFull ? (
+          <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full font-semibold">+ Lembur</span>
+        ) : day.normalQty === 0 ? null : (
+          <span className="text-xs text-slate-400">{NORMAL_CAP - day.normalQty} sisa</span>
         )}
       </div>
     </div>
@@ -232,6 +257,7 @@ function SummaryCard({ label, value, sub, color, icon }: {
     blue: 'bg-blue-50 border-blue-100',
     green: 'bg-emerald-50 border-emerald-100',
     amber: 'bg-amber-50 border-amber-100',
+    orange: 'bg-orange-50 border-orange-100',
     red: 'bg-red-50 border-red-100',
     purple: 'bg-purple-50 border-purple-100',
   };
